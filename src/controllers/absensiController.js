@@ -1,16 +1,30 @@
-// Temporary in-memory data store (replace with database later)
-let absensiRecords = [];
-let nextId = 1;
+const { query } = require("../config/database");
 
 // GET all absensi records
-exports.getAllAbsensi = (req, res) => {
+exports.getAllAbsensi = async (req, res) => {
     try {
+        const results = await query(
+            `SELECT 
+                a.*,
+                u.nik,
+                u.name as user_name,
+                u.position,
+                l.nama_kantor,
+                l.alamat as alamat_kantor
+            FROM absensi a
+            JOIN users u ON a.user_id = u.id
+            JOIN lokasi_kantor l ON a.lokasi_id = l.id
+            ORDER BY a.tanggal DESC, a.clock_in_time DESC
+            LIMIT 100`,
+        );
+
         res.json({
             success: true,
-            data: absensiRecords,
-            count: absensiRecords.length,
+            data: results,
+            count: results.length,
         });
     } catch (error) {
+        console.error("Get all absensi error:", error);
         res.status(500).json({
             success: false,
             message: "Server error",
@@ -20,17 +34,30 @@ exports.getAllAbsensi = (req, res) => {
 };
 
 // GET absensi by user ID
-exports.getAbsensiByUser = (req, res) => {
+exports.getAbsensiByUser = async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
-        const userAbsensi = absensiRecords.filter((a) => a.userId === userId);
+
+        const results = await query(
+            `SELECT 
+                a.*,
+                l.nama_kantor,
+                l.alamat as alamat_kantor
+            FROM absensi a
+            JOIN lokasi_kantor l ON a.lokasi_id = l.id
+            WHERE a.user_id = ?
+            ORDER BY a.tanggal DESC
+            LIMIT 30`,
+            [userId],
+        );
 
         res.json({
             success: true,
-            data: userAbsensi,
-            count: userAbsensi.length,
+            data: results,
+            count: results.length,
         });
     } catch (error) {
+        console.error("Get absensi by user error:", error);
         res.status(500).json({
             success: false,
             message: "Server error",
@@ -40,21 +67,33 @@ exports.getAbsensiByUser = (req, res) => {
 };
 
 // Get today's absensi for logged in user
-exports.getTodayAbsensi = (req, res) => {
+exports.getTodayAbsensi = async (req, res) => {
     try {
-        // Untuk development, ambil dari header atau body
-        // Nanti ganti dengan req.user.id dari JWT middleware
-        const userId = req.headers['x-user-id'] || 1;
-
-        // Get today's date (format: YYYY-MM-DD)
-        const today = new Date().toLocaleDateString('id-ID');
+        const userId = req.headers["x-user-id"] || 1;
+        const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
         // Cari absensi hari ini untuk user ini
-        const todayAbsensi = absensiRecords.find(
-            (record) => record.userId == userId && record.date === today
+        const results = await query(
+            `SELECT 
+                id,
+                clock_in_time,
+                clock_out_time,
+                clock_in_latitude,
+                clock_in_longitude,
+                clock_in_address,
+                clock_out_latitude,
+                clock_out_longitude,
+                clock_out_address,
+                clock_in_photo,
+                clock_out_photo,
+                status,
+                durasi_kerja
+            FROM absensi 
+            WHERE user_id = ? AND tanggal = ?`,
+            [userId, today],
         );
 
-        if (!todayAbsensi) {
+        if (results.length === 0) {
             return res.status(200).json({
                 success: true,
                 data: {
@@ -64,16 +103,30 @@ exports.getTodayAbsensi = (req, res) => {
             });
         }
 
+        const absensi = results[0];
+
         res.status(200).json({
             success: true,
             data: {
-                id: todayAbsensi.id,
-                clock_in: todayAbsensi.checkInTime,
-                clock_out: todayAbsensi.checkOutTime,
-                check_in_location: todayAbsensi.checkInLocation,
-                check_out_location: todayAbsensi.checkOutLocation,
-                photo_in: todayAbsensi.photoIn,
-                photo_out: todayAbsensi.photoOut,
+                id: absensi.id,
+                clock_in: absensi.clock_in_time,
+                clock_out: absensi.clock_out_time,
+                check_in_location: {
+                    latitude: absensi.clock_in_latitude,
+                    longitude: absensi.clock_in_longitude,
+                    address: absensi.clock_in_address,
+                },
+                check_out_location: absensi.clock_out_latitude
+                    ? {
+                          latitude: absensi.clock_out_latitude,
+                          longitude: absensi.clock_out_longitude,
+                          address: absensi.clock_out_address,
+                      }
+                    : null,
+                photo_in: absensi.clock_in_photo,
+                photo_out: absensi.clock_out_photo,
+                status: absensi.status,
+                durasi_kerja: absensi.durasi_kerja,
             },
         });
     } catch (error) {
@@ -81,17 +134,16 @@ exports.getTodayAbsensi = (req, res) => {
         res.status(500).json({
             success: false,
             message: "Gagal mendapatkan data absensi hari ini",
+            error: error.message,
         });
     }
 };
 
 // POST clock-in
-exports.clockIn = (req, res) => {
+exports.clockIn = async (req, res) => {
     try {
-        // Untuk development, ambil dari header atau body
-        const userId = req.headers['x-user-id'] || req.body.user_id || 1;
-        const userName = req.body.user_name || 'User';
-        
+        const userId = req.headers["x-user-id"] || req.body.user_id || 1;
+
         const {
             timestamp,
             latitude,
@@ -109,60 +161,59 @@ exports.clockIn = (req, res) => {
             });
         }
 
-        // Get today's date
-        const today = new Date().toLocaleDateString('id-ID');
+        const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
-        // Check apakah sudah clock-in hari ini
-        const existingAbsensi = absensiRecords.find(
-            (record) => record.userId == userId && record.date === today
+        // Cek apakah sudah clock-in hari ini
+        const existing = await query(
+            "SELECT id FROM absensi WHERE user_id = ? AND tanggal = ?",
+            [userId, today],
         );
 
-        if (existingAbsensi) {
+        if (existing.length > 0) {
             return res.status(400).json({
                 success: false,
                 message: "Anda sudah melakukan clock-in hari ini",
             });
         }
 
-        // Simpan foto jika ada (sementara simpan path/info saja)
-        let photoInfo = null;
+        // Simpan foto path jika ada
+        let photoPath = null;
         if (req.file) {
-            photoInfo = {
-                filename: req.file.filename,
-                path: req.file.path,
-                mimetype: req.file.mimetype,
-            };
+            photoPath = req.file.path;
         }
 
-        const newAbsensi = {
-            id: nextId++,
-            userId: userId,
-            userName: userName,
-            date: today,
-            checkInTime: timestamp || new Date().toISOString(),
-            checkInLocation: {
-                latitude: parseFloat(latitude),
-                longitude: parseFloat(longitude),
-                address: address || 'Unknown',
-            },
-            distanceFromOffice: parseFloat(distance_from_office) || 0,
-            lokasiId: parseInt(lokasi_id),
-            photoIn: photoInfo,
-            checkOutTime: null,
-            checkOutLocation: null,
-            photoOut: null,
-        };
-
-        absensiRecords.push(newAbsensi);
+        // Insert absensi baru
+        const result = await query(
+            `INSERT INTO absensi (
+                user_id, lokasi_id, tanggal,
+                clock_in_time, clock_in_latitude, clock_in_longitude,
+                clock_in_address, clock_in_distance, clock_in_photo
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                userId,
+                lokasi_id,
+                today,
+                timestamp || new Date(),
+                latitude,
+                longitude,
+                address || "Unknown",
+                distance_from_office || 0,
+                photoPath,
+            ],
+        );
 
         res.status(201).json({
             success: true,
             message: "Clock-in berhasil",
             data: {
-                id: newAbsensi.id,
-                clock_in: newAbsensi.checkInTime,
-                check_in_location: newAbsensi.checkInLocation,
-                distance_from_office: newAbsensi.distanceFromOffice,
+                id: result.insertId,
+                clock_in: timestamp || new Date(),
+                check_in_location: {
+                    latitude: parseFloat(latitude),
+                    longitude: parseFloat(longitude),
+                    address: address || "Unknown",
+                },
+                distance_from_office: distance_from_office || 0,
             },
         });
     } catch (error) {
@@ -176,17 +227,16 @@ exports.clockIn = (req, res) => {
 };
 
 // POST clock-out
-exports.clockOut = (req, res) => {
+exports.clockOut = async (req, res) => {
     try {
-        const userId = req.headers['x-user-id'] || req.body.user_id || 1;
-        
+        const userId = req.headers["x-user-id"] || req.body.user_id || 1;
+
         const {
             timestamp,
             latitude,
             longitude,
             address,
             distance_from_office,
-            lokasi_id,
         } = req.body;
 
         // Validasi input
@@ -197,56 +247,76 @@ exports.clockOut = (req, res) => {
             });
         }
 
-        // Get today's date
-        const today = new Date().toLocaleDateString('id-ID');
+        const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
         // Cari absensi hari ini
-        const absensiIndex = absensiRecords.findIndex(
-            (record) => record.userId == userId && record.date === today
+        const absensiData = await query(
+            "SELECT * FROM absensi WHERE user_id = ? AND tanggal = ?",
+            [userId, today],
         );
 
-        if (absensiIndex === -1) {
+        if (absensiData.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: "Anda belum melakukan clock-in hari ini",
             });
         }
 
-        if (absensiRecords[absensiIndex].checkOutTime) {
+        const absensi = absensiData[0];
+
+        if (absensi.clock_out_time) {
             return res.status(400).json({
                 success: false,
                 message: "Anda sudah melakukan clock-out hari ini",
             });
         }
 
-        // Simpan foto jika ada
-        let photoInfo = null;
+        // Simpan foto path jika ada
+        let photoPath = null;
         if (req.file) {
-            photoInfo = {
-                filename: req.file.filename,
-                path: req.file.path,
-                mimetype: req.file.mimetype,
-            };
+            photoPath = req.file.path;
         }
 
-        // Update record
-        absensiRecords[absensiIndex].checkOutTime = timestamp || new Date().toISOString();
-        absensiRecords[absensiIndex].checkOutLocation = {
-            latitude: parseFloat(latitude),
-            longitude: parseFloat(longitude),
-            address: address || 'Unknown',
-        };
-        absensiRecords[absensiIndex].photoOut = photoInfo;
+        // Update absensi dengan data clock-out
+        await query(
+            `UPDATE absensi SET
+                clock_out_time = ?,
+                clock_out_latitude = ?,
+                clock_out_longitude = ?,
+                clock_out_address = ?,
+                clock_out_distance = ?,
+                clock_out_photo = ?,
+                durasi_kerja = TIMEDIFF(?, clock_in_time)
+            WHERE id = ?`,
+            [
+                timestamp || new Date(),
+                latitude,
+                longitude,
+                address || "Unknown",
+                distance_from_office || 0,
+                photoPath,
+                timestamp || new Date(),
+                absensi.id,
+            ],
+        );
 
         res.status(200).json({
             success: true,
             message: "Clock-out berhasil",
             data: {
-                id: absensiRecords[absensiIndex].id,
-                clock_in: absensiRecords[absensiIndex].checkInTime,
-                clock_out: absensiRecords[absensiIndex].checkOutTime,
-                check_in_location: absensiRecords[absensiIndex].checkInLocation,
-                check_out_location: absensiRecords[absensiIndex].checkOutLocation,
+                id: absensi.id,
+                clock_in: absensi.clock_in_time,
+                clock_out: timestamp || new Date(),
+                check_in_location: {
+                    latitude: absensi.clock_in_latitude,
+                    longitude: absensi.clock_in_longitude,
+                    address: absensi.clock_in_address,
+                },
+                check_out_location: {
+                    latitude: parseFloat(latitude),
+                    longitude: parseFloat(longitude),
+                    address: address || "Unknown",
+                },
             },
         });
     } catch (error) {
