@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const absensiController = require("../controllers/absensiController");
+const { requireAuth } = require("../middleware/authMiddleware");
 const multer = require("multer");
 const path = require("path");
 
@@ -13,7 +14,10 @@ const storage = multer.diskStorage({
         const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
         cb(
             null,
-            file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname),
+            file.fieldname +
+                "-" +
+                uniqueSuffix +
+                path.extname(file.originalname),
         );
     },
 });
@@ -33,13 +37,17 @@ const upload = multer({
         if (mimetype && extname) {
             return cb(null, true);
         } else {
-            cb(new Error("Hanya file gambar (JPEG, JPG, PNG) yang diperbolehkan"));
+            cb(
+                new Error(
+                    "Hanya file gambar (JPEG, JPG, PNG) yang diperbolehkan",
+                ),
+            );
         }
     },
 });
 
 // GET absensi hari ini untuk user yang login
-router.get("/today", absensiController.getTodayAbsensi);
+router.get("/today", requireAuth, absensiController.getTodayAbsensi);
 
 // GET all absensi records
 router.get("/", absensiController.getAllAbsensi);
@@ -48,9 +56,19 @@ router.get("/", absensiController.getAllAbsensi);
 router.get("/user/:userId", absensiController.getAbsensiByUser);
 
 // POST clock-in dengan upload foto
-router.post("/clock-in", upload.single("photo"), absensiController.clockIn);
+router.post(
+    "/clock-in",
+    requireAuth,
+    upload.single("photo"),
+    absensiController.clockIn,
+);
 
 // POST clock-out dengan upload foto
-router.post("/clock-out", upload.single("photo"), absensiController.clockOut);
+router.post(
+    "/clock-out",
+    requireAuth,
+    upload.single("photo"),
+    absensiController.clockOut,
+);
 
 module.exports = router;

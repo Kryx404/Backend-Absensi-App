@@ -69,7 +69,15 @@ exports.getAbsensiByUser = async (req, res) => {
 // Get today's absensi for logged in user
 exports.getTodayAbsensi = async (req, res) => {
     try {
-        const userId = req.headers["x-user-id"] || 1;
+        const userId = req.user && req.user.id;
+        if (!userId) {
+            return res
+                .status(401)
+                .json({
+                    success: false,
+                    message: "Unauthorized: user not authenticated",
+                });
+        }
         const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
         // Cari absensi hari ini untuk user ini
@@ -142,7 +150,15 @@ exports.getTodayAbsensi = async (req, res) => {
 // POST clock-in
 exports.clockIn = async (req, res) => {
     try {
-        const userId = req.headers["x-user-id"] || req.body.user_id || 1;
+        const userId = req.user && req.user.id;
+        if (!userId) {
+            return res
+                .status(401)
+                .json({
+                    success: false,
+                    message: "Unauthorized: user not authenticated",
+                });
+        }
 
         const {
             timestamp,
@@ -229,7 +245,15 @@ exports.clockIn = async (req, res) => {
 // POST clock-out
 exports.clockOut = async (req, res) => {
     try {
-        const userId = req.headers["x-user-id"] || req.body.user_id || 1;
+        const userId = req.user && req.user.id;
+        if (!userId) {
+            return res
+                .status(401)
+                .json({
+                    success: false,
+                    message: "Unauthorized: user not authenticated",
+                });
+        }
 
         const {
             timestamp,
