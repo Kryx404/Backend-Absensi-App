@@ -38,6 +38,20 @@ exports.getAbsensiByUser = async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
 
+        // Allow only the same authenticated user to fetch their data
+        const authUserId = req.user && req.user.id;
+        if (!authUserId) {
+            return res
+                .status(401)
+                .json({ success: false, message: "Unauthorized" });
+        }
+
+        if (authUserId !== userId) {
+            return res
+                .status(403)
+                .json({ success: false, message: "Forbidden" });
+        }
+
         const results = await query(
             `SELECT 
                 a.*,
@@ -58,6 +72,44 @@ exports.getAbsensiByUser = async (req, res) => {
         });
     } catch (error) {
         console.error("Get absensi by user error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message,
+        });
+    }
+};
+
+// GET absensi for authenticated user
+exports.getAbsensiForAuthUser = async (req, res) => {
+    try {
+        const userId = req.user && req.user.id;
+        if (!userId) {
+            return res
+                .status(401)
+                .json({ success: false, message: "Unauthorized" });
+        }
+
+        // Optional query params: limit, offset
+        const limit = parseInt(req.query.limit, 10) || 30;
+        const offset = parseInt(req.query.offset, 10) || 0;
+
+        const results = await query(
+            `SELECT 
+                a.*, 
+                l.nama_kantor, 
+                l.alamat as alamat_kantor
+            FROM absensi a
+            JOIN lokasi_kantor l ON a.lokasi_id = l.id
+            WHERE a.user_id = ?
+            ORDER BY a.tanggal DESC, a.clock_in_time DESC
+            LIMIT ? OFFSET ?`,
+            [userId, limit, offset],
+        );
+
+        res.json({ success: true, data: results, count: results.length });
+    } catch (error) {
+        console.error("Get absensi for auth user error:", error);
         res.status(500).json({
             success: false,
             message: "Server error",
