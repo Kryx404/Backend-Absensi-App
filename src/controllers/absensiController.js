@@ -83,6 +83,14 @@ exports.getAbsensiByUser = async (req, res) => {
 // GET absensi for authenticated user
 exports.getAbsensiForAuthUser = async (req, res) => {
     try {
+        console.log("[absensi] getAbsensiForAuthUser called", {
+            path: req.path,
+            headers: {
+                authorization: req.headers.authorization,
+                "x-user-id": req.headers["x-user-id"],
+            },
+        });
+
         const userId = req.user && req.user.id;
         if (!userId) {
             return res
@@ -123,12 +131,10 @@ exports.getTodayAbsensi = async (req, res) => {
     try {
         const userId = req.user && req.user.id;
         if (!userId) {
-            return res
-                .status(401)
-                .json({
-                    success: false,
-                    message: "Unauthorized: user not authenticated",
-                });
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized: user not authenticated",
+            });
         }
         const today = new Date().toISOString().split("T")[0]; // Format: YYYY-MM-DD
 
@@ -204,12 +210,10 @@ exports.clockIn = async (req, res) => {
     try {
         const userId = req.user && req.user.id;
         if (!userId) {
-            return res
-                .status(401)
-                .json({
-                    success: false,
-                    message: "Unauthorized: user not authenticated",
-                });
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized: user not authenticated",
+            });
         }
 
         const {
@@ -299,12 +303,10 @@ exports.clockOut = async (req, res) => {
     try {
         const userId = req.user && req.user.id;
         if (!userId) {
-            return res
-                .status(401)
-                .json({
-                    success: false,
-                    message: "Unauthorized: user not authenticated",
-                });
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized: user not authenticated",
+            });
         }
 
         const {

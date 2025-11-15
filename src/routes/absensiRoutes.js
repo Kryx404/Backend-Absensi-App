@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const absensiController = require("../controllers/absensiController");
 const { requireAuth } = require("../middleware/authMiddleware");
-const { requireAuth } = require("../middleware/authMiddleware");
 const multer = require("multer");
 const path = require("path");
 
@@ -56,6 +55,9 @@ const upload = multer({
     },
 });
 
+// GET absensi untuk user yang login (with pagination)
+router.get("/me", requireAuth, absensiController.getAbsensiForAuthUser);
+
 // GET absensi hari ini untuk user yang login
 router.get("/today", requireAuth, absensiController.getTodayAbsensi);
 
@@ -72,20 +74,8 @@ router.post(
     upload.single("photo"),
     absensiController.clockIn,
 );
-router.post(
-    "/clock-in",
-    requireAuth,
-    upload.single("photo"),
-    absensiController.clockIn,
-);
 
 // POST clock-out dengan upload foto
-router.post(
-    "/clock-out",
-    requireAuth,
-    upload.single("photo"),
-    absensiController.clockOut,
-);
 router.post(
     "/clock-out",
     requireAuth,
