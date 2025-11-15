@@ -66,9 +66,9 @@ exports.login = async (req, res) => {
 // POST logout
 exports.logout = async (req, res) => {
     try {
-        const userId = req.headers["x-user-id"] || req.body.user_id;
+        const userId = req.user && req.user.id;
 
-        // Log aktivitas logout jika ada user_id
+        // Log aktivitas logout for authenticated user
         if (userId) {
             await query(
                 "INSERT INTO log_aktivitas (user_id, aktivitas, deskripsi, ip_address) VALUES (?, ?, ?, ?)",
