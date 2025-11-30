@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const absensiController = require("../controllers/absensiController");
+const rekapAbsensiController = require("../controllers/rekapAbsensiController");
 const { requireAuth } = require("../middleware/authMiddleware");
 const multer = require("multer");
 const path = require("path");
@@ -60,6 +61,12 @@ router.get("/me", requireAuth, absensiController.getAbsensiForAuthUser);
 
 // GET absensi hari ini untuk user yang login
 router.get("/today", requireAuth, absensiController.getTodayAbsensi);
+
+// GET rekap absensi dengan filter lengkap (untuk admin panel)
+router.get("/rekap", rekapAbsensiController.getRekapAbsensi);
+
+// GET summary statistik rekap
+router.get("/rekap/summary", rekapAbsensiController.getRekapSummary);
 
 // GET all absensi records
 router.get("/", absensiController.getAllAbsensi);
