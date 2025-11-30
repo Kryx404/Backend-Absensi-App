@@ -254,13 +254,13 @@ exports.clockIn = async (req, res) => {
             photoPath = req.file.path;
         }
 
-        // Insert absensi baru
+        // Insert absensi baru dengan status 'hadir'
         const result = await query(
             `INSERT INTO absensi (
                 user_id, lokasi_id, tanggal,
                 clock_in_time, clock_in_latitude, clock_in_longitude,
-                clock_in_address, clock_in_distance, clock_in_photo
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                clock_in_address, clock_in_distance, clock_in_photo, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 userId,
                 lokasi_id,
@@ -271,6 +271,7 @@ exports.clockIn = async (req, res) => {
                 address || "Unknown",
                 distance_from_office || 0,
                 photoPath,
+                "hadir", // Default status hadir saat clock-in
             ],
         );
 
