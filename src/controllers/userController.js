@@ -122,37 +122,84 @@ exports.updateUser = async (req, res) => {
         const { name, email, position, role, phone, address, status } =
             req.body;
 
+        console.log("Update user request:", {
+            userId,
+            body: req.body,
+        });
+
         // Cek apakah user exists
-        const existingUser = await query("SELECT id FROM users WHERE id = ?", [
+        const existingUser = await query("SELECT * FROM users WHERE id = ?", [
             userId,
         ]);
 
         if (existingUser.length === 0) {
+            console.log("User not found:", userId);
             return res.status(404).json({
                 success: false,
                 message: "User not found",
             });
         }
 
+        // Build update query dinamis - hanya update field yang dikirim
+        const updateFields = [];
+        const updateValues = [];
+
+        if (name !== undefined && name !== null && name !== "") {
+            updateFields.push("name = ?");
+            updateValues.push(name);
+        }
+        if (email !== undefined && email !== null) {
+            updateFields.push("email = ?");
+            updateValues.push(email);
+        }
+        if (position !== undefined && position !== null) {
+            updateFields.push("position = ?");
+            updateValues.push(position);
+        }
+        if (role !== undefined && role !== null) {
+            updateFields.push("role = ?");
+            updateValues.push(role);
+        }
+        if (phone !== undefined && phone !== null) {
+            updateFields.push("phone = ?");
+            updateValues.push(phone);
+        }
+        if (address !== undefined && address !== null) {
+            updateFields.push("address = ?");
+            updateValues.push(address);
+        }
+        if (status !== undefined && status !== null) {
+            updateFields.push("status = ?");
+            updateValues.push(status);
+        }
+
+        // Jika tidak ada field yang diupdate
+        if (updateFields.length === 0) {
+            return res.json({
+                success: true,
+                message: "No fields to update",
+                data: existingUser[0],
+            });
+        }
+
         // Update user
-        await query(
-            `UPDATE users SET 
-        name = COALESCE(?, name),
-        email = COALESCE(?, email),
-        position = COALESCE(?, position),
-        role = COALESCE(?, role),
-        phone = COALESCE(?, phone),
-        address = COALESCE(?, address),
-        status = COALESCE(?, status)
-      WHERE id = ?`,
-            [name, email, position, role, phone, address, status, userId],
-        );
+        updateValues.push(userId);
+        const updateQuery = `UPDATE users SET ${updateFields.join(
+            ", ",
+        )} WHERE id = ?`;
+
+        console.log("Update query:", updateQuery);
+        console.log("Update values:", updateValues);
+
+        await query(updateQuery, updateValues);
 
         // Ambil data user yang sudah diupdate
         const updatedUser = await query(
             "SELECT id, nik, name, email, position, role, phone, address, status, created_at, updated_at FROM users WHERE id = ?",
             [userId],
         );
+
+        console.log("User updated successfully:", updatedUser[0]);
 
         res.json({
             success: true,
