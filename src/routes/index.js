@@ -5,11 +5,13 @@ const authRoutes = require("./authRoutes");
 const userRoutes = require("./userRoutes");
 const absensiRoutes = require("./absensiRoutes");
 const lokasiRoutes = require("./lokasiRoutes");
+const statistikRoutes = require("./statistikRoutes");
 
 // Mount routes
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
 router.use("/absensi", absensiRoutes);
 router.use("/lokasi", lokasiRoutes);
+router.use("/statistik", statistikRoutes);
 
 module.exports = router;
