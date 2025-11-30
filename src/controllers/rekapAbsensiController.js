@@ -13,29 +13,31 @@ exports.getRekapAbsensi = async (req, res) => {
             search,
             divisi,
             departemen,
+            status,
             sortBy = "tanggal",
             sortOrder = "DESC",
             page = 1,
             limit = 25,
         } = req.query;
 
-        // Build WHERE clause
-        const conditions = [];
-        const params = [];
+        // Build date filter for JOIN condition
+        let dateCondition = "";
+        const joinParams = [];
 
-        // Filter by date range
         if (startDate && endDate) {
-            conditions.push("a.tanggal BETWEEN ? AND ?");
-            params.push(startDate, endDate);
+            dateCondition = "AND a.tanggal BETWEEN ? AND ?";
+            joinParams.push(startDate, endDate);
         } else if (month && year) {
-            // Filter by month and year
-            conditions.push("MONTH(a.tanggal) = ? AND YEAR(a.tanggal) = ?");
-            params.push(parseInt(month), parseInt(year));
+            dateCondition = "AND MONTH(a.tanggal) = ? AND YEAR(a.tanggal) = ?";
+            joinParams.push(parseInt(month), parseInt(year));
         } else if (year) {
-            // Filter by year only
-            conditions.push("YEAR(a.tanggal) = ?");
-            params.push(parseInt(year));
+            dateCondition = "AND YEAR(a.tanggal) = ?";
+            joinParams.push(parseInt(year));
         }
+
+        // Build WHERE clause for user filters
+        const conditions = ["u.status = 'active'"];
+        const params = [...joinParams];
 
         // Search by name or NIK
         if (search) {
@@ -44,20 +46,29 @@ exports.getRekapAbsensi = async (req, res) => {
             params.push(searchTerm, searchTerm);
         }
 
-        // Filter by divisi (prepare for future)
+        // Filter by divisi
         if (divisi) {
             conditions.push("u.divisi = ?");
             params.push(divisi);
         }
 
-        // Filter by departemen (prepare for future)
+        // Filter by departemen
         if (departemen) {
             conditions.push("u.departemen = ?");
             params.push(departemen);
         }
 
-        const whereClause =
-            conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+        // Filter by status
+        if (status) {
+            if (status === "belum_absen") {
+                conditions.push("a.id IS NULL");
+            } else {
+                conditions.push("a.status = ?");
+                params.push(status);
+            }
+        }
+
+        const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
         // Validate sortBy to prevent SQL injection
         const allowedSortFields = [
@@ -74,17 +85,21 @@ exports.getRekapAbsensi = async (req, res) => {
                 ? "u.name"
                 : sortBy === "nik"
                 ? "u.nik"
-                : `a.${sortBy}`
-            : "a.tanggal";
+                : sortBy === "tanggal"
+                ? "COALESCE(a.tanggal, '9999-12-31')"
+                : sortBy === "status"
+                ? "COALESCE(a.status, 'zzz')"
+                : `COALESCE(a.${sortBy}, '9999-12-31 23:59:59')`
+            : "COALESCE(a.tanggal, '9999-12-31')";
 
         const order = sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC";
 
         // Count total records
         const countQuery = `
             SELECT COUNT(*) as total
-            FROM absensi a
-            JOIN users u ON a.user_id = u.id
-            JOIN lokasi_kantor l ON a.lokasi_id = l.id
+            FROM users u
+            LEFT JOIN absensi a ON u.id = a.user_id ${dateCondition}
+            LEFT JOIN lokasi_kantor l ON a.lokasi_id = l.id
             ${whereClause}
         `;
 
@@ -116,6 +131,10 @@ exports.getRekapAbsensi = async (req, res) => {
                 a.durasi_kerja,
                 a.status,
                 a.keterangan,
+                CASE 
+                    WHEN a.id IS NULL THEN 'belum_absen'
+                    ELSE a.status
+                END as current_status,
                 u.id as user_id,
                 u.nik,
                 u.name as user_name,
@@ -127,9 +146,9 @@ exports.getRekapAbsensi = async (req, res) => {
                 l.alamat as alamat_kantor,
                 l.latitude as kantor_latitude,
                 l.longitude as kantor_longitude
-            FROM absensi a
-            JOIN users u ON a.user_id = u.id
-            JOIN lokasi_kantor l ON a.lokasi_id = l.id
+            FROM users u
+            LEFT JOIN absensi a ON u.id = a.user_id ${dateCondition}
+            LEFT JOIN lokasi_kantor l ON a.lokasi_id = l.id
             ${whereClause}
             ORDER BY ${sortField} ${order}
             LIMIT ? OFFSET ?
