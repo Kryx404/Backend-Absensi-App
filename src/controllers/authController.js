@@ -27,6 +27,14 @@ exports.login = async (req, res) => {
 
         const user = users[0];
 
+        // Cek apakah user adalah admin
+        if (user.role !== "admin") {
+            return res.status(403).json({
+                success: false,
+                message: "Akses ditolak. Hanya admin yang dapat login",
+            });
+        }
+
         // Cek password (untuk sementara plain text, nanti gunakan bcrypt)
         // TODO: Gunakan bcrypt.compare() untuk production
         if (user.password !== password) {
